@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SCFHS Pass Prediction Engine</title>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f6f8;
+  margin: 0;
+}
+.container {
+  max-width: 900px;
+  margin: auto;
+  background: #ffffff;
+  padding: 20px;
+  min-height: 100vh;
+}
+h1, h2 {
+  text-align: center;
+}
+.hidden { display: none; }
+
+input, button {
+  padding: 10px;
+  margin: 6px 0;
+  width: 100%;
+  font-size: 16px;
+}
+
+#timer {
+  text-align: center;
+  font-weight: bold;
+  font-size: 18px;
+  margin-bottom: 10px;
+  color: #1f2937;
+}
+
+.option {
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin-top: 8px;
+  cursor: pointer;
+}
+.option:hover { background: #eef2f5; }
+.option.selected { background: #d9e8ff; }
+.option.correct { border-left: 6px solid green; }
+.option.wrong { border-left: 6px solid red; }
+
+.rationale {
+  background: #f9fafb;
+  border: 1px solid #ccc;
+  padding: 15px;
+  margin-top: 15px;
+}
+
+.report {
+  background: #f1f5f9;
+  padding: 20px;
+  margin-top: 20px;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<!-- START SCREEN -->
+<div id="startScreen">
+  <h1>SCFHS Pass Prediction Test</h1>
+  <input type="text" id="candidateName" placeholder="Full Name">
+  <input type="text" id="candidateID" placeholder="Candidate ID">
+  <button onclick="startExam()">Start Test</button>
+</div>
+
+<!-- EXAM SCREEN -->
+<div id="examScreen" class="hidden">
+  <h2 id="qCounter"></h2>
+  <div id="timer">Time Remaining: 20:00</div>
+  <p id="questionText"></p>
+  <div id="options"></div>
+
+  <button onclick="submitAnswer()">Submit Answer</button>
+
+  <div id="rationaleBox" class="rationale hidden"></div>
+  <button id="nextBtn" class="hidden" onclick="nextQuestion()">Next Question</button>
+</div>
+
+<!-- RESULT SCREEN -->
+<div id="resultScreen" class="hidden">
+  <h1>PASS PREDICTION RESULT</h1>
+  <div id="finalReport" class="report"></div>
+</div>
+
+</div>
+
+<script>
+// ================= QUESTIONS =================
+const questions = [
+{
+  q: "A postoperative client suddenly becomes restless, hypotensive, and tachycardic. The surgical drain output has increased significantly. What is the nurse’s PRIORITY action?",
+  options: [
+    { text: "Assess the surgical site and notify the surgeon immediately", tag: "SCFHS" },
+    { text: "Administer prescribed analgesics", tag: "SAFE_DELAY" },
+    { text: "Reassure the client and continue monitoring", tag: "NCLEX" },
+    { text: "Document findings in the medical record", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Signs indicate possible hemorrhage requiring immediate assessment and notification.",
+    distractors: {
+      SAFE_DELAY: "Pain control does not address hemodynamic instability.",
+      NCLEX: "Reassurance delays urgent intervention.",
+      STR: "Documentation alone is unsafe without action."
+    }
+  }
+},
+{
+  q: "A client receiving IV potassium chloride complains of burning pain at the infusion site. What is the nurse’s BEST action?",
+  options: [
+    { text: "Stop the infusion and assess the IV site", tag: "SCFHS" },
+    { text: "Slow the infusion rate", tag: "SAFE_DELAY" },
+    { text: "Apply a warm compress over the site", tag: "NCLEX" },
+    { text: "Flush the IV line with normal saline", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "IV potassium is irritating and may cause infiltration or phlebitis.",
+    distractors: {
+      SAFE_DELAY: "Rate change does not correct possible infiltration.",
+      NCLEX: "Heat is inappropriate until infiltration is ruled out.",
+      STR: "Flushing may worsen tissue damage."
+    }
+  }
+},
+{
+  q: "A confused client repeatedly attempts to get out of bed despite fall precautions. Which intervention should the nurse implement FIRST?",
+  options: [
+    { text: "Place the client in a room near the nurses’ station", tag: "SCFHS" },
+    { text: "Apply physical restraints", tag: "SAFE_DELAY" },
+    { text: "Administer PRN sedative medication", tag: "NCLEX" },
+    { text: "Raise all four side rails", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Close observation is a least-restrictive and effective safety measure.",
+    distractors: {
+      SAFE_DELAY: "Restraints require last-resort justification.",
+      NCLEX: "Sedation increases fall risk.",
+      STR: "Four side rails constitute restraint."
+    }
+  }
+},
+{
+  q: "A client with chronic kidney disease is prescribed furosemide. Which laboratory value should the nurse monitor most closely?",
+  options: [
+    { text: "Potassium level", tag: "SCFHS" },
+    { text: "Hemoglobin level", tag: "SAFE_DELAY" },
+    { text: "White blood cell count", tag: "NCLEX" },
+    { text: "Platelet count", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Loop diuretics increase potassium loss, risking hypokalemia.",
+    distractors: {
+      SAFE_DELAY: "Hemoglobin is not directly affected.",
+      NCLEX: "WBC is unrelated to diuretic therapy.",
+      STR: "Platelets are not influenced by furosemide."
+    }
+  }
+},
+{
+  q: "A nurse is caring for a client with increased intracranial pressure. Which finding requires IMMEDIATE intervention?",
+  options: [
+    { text: "Sudden decrease in level of consciousness", tag: "SCFHS" },
+    { text: "Complaint of headache", tag: "SAFE_DELAY" },
+    { text: "Pupil size equal and reactive", tag: "NCLEX" },
+    { text: "Nausea without vomiting", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "A sudden LOC change suggests cerebral herniation.",
+    distractors: {
+      SAFE_DELAY: "Headache is expected with ICP.",
+      NCLEX: "Normal pupils are reassuring.",
+      STR: "Mild nausea is non-emergent."
+    }
+  }
+},
+{
+  q: "A client receiving blood transfusion develops chills and lower back pain. What is the nurse’s PRIORITY action?",
+  options: [
+    { text: "Stop the transfusion immediately", tag: "SCFHS" },
+    { text: "Slow the transfusion rate", tag: "SAFE_DELAY" },
+    { text: "Administer antipyretics", tag: "NCLEX" },
+    { text: "Document the reaction", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Symptoms indicate acute transfusion reaction requiring immediate cessation.",
+    distractors: {
+      SAFE_DELAY: "Slowing does not prevent progression.",
+      NCLEX: "Medication is secondary to stopping blood.",
+      STR: "Documentation follows emergency care."
+    }
+  }
+},
+{
+  q: "A client with heart failure reports sudden weight gain of 2 kg in two days. What should the nurse do FIRST?",
+  options: [
+    { text: "Assess lung sounds and edema", tag: "SCFHS" },
+    { text: "Encourage increased fluid intake", tag: "SAFE_DELAY" },
+    { text: "Administer prescribed diuretics", tag: "NCLEX" },
+    { text: "Document the finding", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Assessment determines severity of fluid overload before intervention.",
+    distractors: {
+      SAFE_DELAY: "Fluids worsen heart failure.",
+      NCLEX: "Medication follows assessment.",
+      STR: "Documentation alone delays care."
+    }
+  }
+},
+{
+  q: "A nurse is educating a client newly diagnosed with type 1 diabetes. Which statement indicates understanding?",
+  options: [
+    { text: "I will never stop taking insulin even when I am sick", tag: "SCFHS" },
+    { text: "I only need insulin when my blood sugar is high", tag: "SAFE_DELAY" },
+    { text: "Exercise replaces the need for insulin", tag: "NCLEX" },
+    { text: "Insulin is only required during meals", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Type 1 diabetes requires lifelong insulin therapy.",
+    distractors: {
+      SAFE_DELAY: "Insulin is required continuously.",
+      NCLEX: "Exercise does not replace insulin.",
+      STR: "Basal insulin is required beyond meals."
+    }
+  }
+},
+{
+  q: "A client on bed rest is at risk for pressure injuries. Which intervention is MOST effective for prevention?",
+  options: [
+    { text: "Reposition the client every 2 hours", tag: "SCFHS" },
+    { text: "Apply lotion to bony prominences", tag: "SAFE_DELAY" },
+    { text: "Massage reddened areas", tag: "NCLEX" },
+    { text: "Use warm compresses on pressure points", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Frequent repositioning reduces prolonged pressure.",
+    distractors: {
+      SAFE_DELAY: "Lotion alone is insufficient.",
+      NCLEX: "Massage damages ischemic tissue.",
+      STR: "Heat increases tissue injury."
+    }
+  }
+},
+{
+  q: "A nurse suspects hypoglycemia in an unconscious client. What is the MOST appropriate immediate intervention?",
+  options: [
+    { text: "Administer IV dextrose", tag: "SCFHS" },
+    { text: "Provide oral glucose gel", tag: "SAFE_DELAY" },
+    { text: "Check urine ketones", tag: "NCLEX" },
+    { text: "Administer insulin", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Unconscious clients require IV glucose for rapid correction.",
+    distractors: {
+      SAFE_DELAY: "Oral glucose is unsafe in unconscious patients.",
+      NCLEX: "Ketone testing delays treatment.",
+      STR: "Insulin worsens hypoglycemia."
+    }
+  }
+},
+{
+  q: "A postoperative client suddenly becomes restless, hypotensive, and tachycardic. The surgical drain output has increased significantly. What is the nurse’s PRIORITY action?",
+  options: [
+    { text: "Assess the surgical site and notify the surgeon immediately", tag: "SCFHS" },
+    { text: "Administer prescribed analgesics", tag: "SAFE_DELAY" },
+    { text: "Reassure the client and continue monitoring", tag: "NCLEX" },
+    { text: "Document findings in the medical record", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Signs indicate possible hemorrhage requiring immediate assessment and notification.",
+    distractors: {
+      SAFE_DELAY: "Pain control does not address hemodynamic instability.",
+      NCLEX: "Reassurance delays urgent intervention.",
+      STR: "Documentation alone is unsafe without action."
+    }
+  }
+},
+{
+  q: "A client receiving IV potassium chloride complains of burning pain at the infusion site. What is the nurse’s BEST action?",
+  options: [
+    { text: "Stop the infusion and assess the IV site", tag: "SCFHS" },
+    { text: "Slow the infusion rate", tag: "SAFE_DELAY" },
+    { text: "Apply a warm compress over the site", tag: "NCLEX" },
+    { text: "Flush the IV line with normal saline", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "IV potassium is irritating and may cause infiltration or phlebitis.",
+    distractors: {
+      SAFE_DELAY: "Rate change does not correct possible infiltration.",
+      NCLEX: "Heat is inappropriate until infiltration is ruled out.",
+      STR: "Flushing may worsen tissue damage."
+    }
+  }
+},
+{
+  q: "A confused client repeatedly attempts to get out of bed despite fall precautions. Which intervention should the nurse implement FIRST?",
+  options: [
+    { text: "Place the client in a room near the nurses’ station", tag: "SCFHS" },
+    { text: "Apply physical restraints", tag: "SAFE_DELAY" },
+    { text: "Administer PRN sedative medication", tag: "NCLEX" },
+    { text: "Raise all four side rails", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Close observation is a least-restrictive and effective safety measure.",
+    distractors: {
+      SAFE_DELAY: "Restraints require last-resort justification.",
+      NCLEX: "Sedation increases fall risk.",
+      STR: "Four side rails constitute restraint."
+    }
+  }
+},
+{
+  q: "A client with chronic kidney disease is prescribed furosemide. Which laboratory value should the nurse monitor most closely?",
+  options: [
+    { text: "Potassium level", tag: "SCFHS" },
+    { text: "Hemoglobin level", tag: "SAFE_DELAY" },
+    { text: "White blood cell count", tag: "NCLEX" },
+    { text: "Platelet count", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Loop diuretics increase potassium loss, risking hypokalemia.",
+    distractors: {
+      SAFE_DELAY: "Hemoglobin is not directly affected.",
+      NCLEX: "WBC is unrelated to diuretic therapy.",
+      STR: "Platelets are not influenced by furosemide."
+    }
+  }
+},
+{
+  q: "A nurse is caring for a client with increased intracranial pressure. Which finding requires IMMEDIATE intervention?",
+  options: [
+    { text: "Sudden decrease in level of consciousness", tag: "SCFHS" },
+    { text: "Complaint of headache", tag: "SAFE_DELAY" },
+    { text: "Pupil size equal and reactive", tag: "NCLEX" },
+    { text: "Nausea without vomiting", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "A sudden LOC change suggests cerebral herniation.",
+    distractors: {
+      SAFE_DELAY: "Headache is expected with ICP.",
+      NCLEX: "Normal pupils are reassuring.",
+      STR: "Mild nausea is non-emergent."
+    }
+  }
+},
+{
+  q: "A client receiving blood transfusion develops chills and lower back pain. What is the nurse’s PRIORITY action?",
+  options: [
+    { text: "Stop the transfusion immediately", tag: "SCFHS" },
+    { text: "Slow the transfusion rate", tag: "SAFE_DELAY" },
+    { text: "Administer antipyretics", tag: "NCLEX" },
+    { text: "Document the reaction", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Symptoms indicate acute transfusion reaction requiring immediate cessation.",
+    distractors: {
+      SAFE_DELAY: "Slowing does not prevent progression.",
+      NCLEX: "Medication is secondary to stopping blood.",
+      STR: "Documentation follows emergency care."
+    }
+  }
+},
+{
+  q: "A client with heart failure reports sudden weight gain of 2 kg in two days. What should the nurse do FIRST?",
+  options: [
+    { text: "Assess lung sounds and edema", tag: "SCFHS" },
+    { text: "Encourage increased fluid intake", tag: "SAFE_DELAY" },
+    { text: "Administer prescribed diuretics", tag: "NCLEX" },
+    { text: "Document the finding", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Assessment determines severity of fluid overload before intervention.",
+    distractors: {
+      SAFE_DELAY: "Fluids worsen heart failure.",
+      NCLEX: "Medication follows assessment.",
+      STR: "Documentation alone delays care."
+    }
+  }
+},
+{
+  q: "A nurse is educating a client newly diagnosed with type 1 diabetes. Which statement indicates understanding?",
+  options: [
+    { text: "I will never stop taking insulin even when I am sick", tag: "SCFHS" },
+    { text: "I only need insulin when my blood sugar is high", tag: "SAFE_DELAY" },
+    { text: "Exercise replaces the need for insulin", tag: "NCLEX" },
+    { text: "Insulin is only required during meals", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Type 1 diabetes requires lifelong insulin therapy.",
+    distractors: {
+      SAFE_DELAY: "Insulin is required continuously.",
+      NCLEX: "Exercise does not replace insulin.",
+      STR: "Basal insulin is required beyond meals."
+    }
+  }
+},
+{
+  q: "A client on bed rest is at risk for pressure injuries. Which intervention is MOST effective for prevention?",
+  options: [
+    { text: "Reposition the client every 2 hours", tag: "SCFHS" },
+    { text: "Apply lotion to bony prominences", tag: "SAFE_DELAY" },
+    { text: "Massage reddened areas", tag: "NCLEX" },
+    { text: "Use warm compresses on pressure points", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Frequent repositioning reduces prolonged pressure.",
+    distractors: {
+      SAFE_DELAY: "Lotion alone is insufficient.",
+      NCLEX: "Massage damages ischemic tissue.",
+      STR: "Heat increases tissue injury."
+    }
+  }
+},
+{
+  q: "A nurse suspects hypoglycemia in an unconscious client. What is the MOST appropriate immediate intervention?",
+  options: [
+    { text: "Administer IV dextrose", tag: "SCFHS" },
+    { text: "Provide oral glucose gel", tag: "SAFE_DELAY" },
+    { text: "Check urine ketones", tag: "NCLEX" },
+    { text: "Administer insulin", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Unconscious clients require IV glucose for rapid correction.",
+    distractors: {
+      SAFE_DELAY: "Oral glucose is unsafe in unconscious patients.",
+      NCLEX: "Ketone testing delays treatment.",
+      STR: "Insulin worsens hypoglycemia."
+    }
+  }
+},
+{
+  q: "A nurse is preparing to administer an intramuscular injection to an adult client. Which site is MOST appropriate?",
+  options: [
+    { text: "Ventrogluteal muscle", tag: "SCFHS" },
+    { text: "Dorsogluteal muscle", tag: "SAFE_DELAY" },
+    { text: "Deltoid muscle", tag: "NCLEX" },
+    { text: "Rectus femoris muscle", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "The ventrogluteal site is safest and free from major nerves and blood vessels.",
+    distractors: {
+      SAFE_DELAY: "Dorsogluteal has risk of sciatic nerve injury.",
+      NCLEX: "Deltoid is limited by volume.",
+      STR: "Rectus femoris is less preferred in adults."
+    }
+  }
+},
+{
+  q: "A client with chronic obstructive pulmonary disease (COPD) is receiving oxygen therapy. Which finding requires immediate nursing intervention?",
+  options: [
+    { text: "Oxygen saturation of 99% on 4 L/min", tag: "SCFHS" },
+    { text: "Barrel-shaped chest", tag: "SAFE_DELAY" },
+    { text: "Use of accessory muscles", tag: "NCLEX" },
+    { text: "Chronic productive cough", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "High oxygen levels can suppress respiratory drive in COPD clients.",
+    distractors: {
+      SAFE_DELAY: "Barrel chest is expected in COPD.",
+      NCLEX: "Accessory muscle use is common during exacerbation.",
+      STR: "Chronic cough is expected."
+    }
+  }
+},
+{
+  q: "A nurse is caring for a client with a nasogastric tube connected to low intermittent suction. Which action is MOST appropriate?",
+  options: [
+    { text: "Assess tube placement before irrigating", tag: "SCFHS" },
+    { text: "Increase suction if drainage slows", tag: "SAFE_DELAY" },
+    { text: "Flush tube routinely every hour", tag: "NCLEX" },
+    { text: "Clamp tube after medication administration", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Placement must be verified to prevent aspiration.",
+    distractors: {
+      SAFE_DELAY: "Increasing suction may damage gastric mucosa.",
+      NCLEX: "Routine flushing is not indicated without order.",
+      STR: "Clamping may worsen gastric distention."
+    }
+  }
+},
+{
+  q: "A postoperative client suddenly develops dyspnea, chest pain, and anxiety. Which complication does the nurse suspect FIRST?",
+  options: [
+    { text: "Pulmonary embolism", tag: "SCFHS" },
+    { text: "Atelectasis", tag: "SAFE_DELAY" },
+    { text: "Pneumonia", tag: "NCLEX" },
+    { text: "Pleural effusion", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Sudden onset respiratory distress is classic for pulmonary embolism.",
+    distractors: {
+      SAFE_DELAY: "Atelectasis develops gradually.",
+      NCLEX: "Pneumonia presents with fever and cough.",
+      STR: "Pleural effusion is not sudden."
+    }
+  }
+},
+{
+  q: "A nurse is reviewing laboratory results for a client receiving warfarin therapy. Which INR value indicates therapeutic anticoagulation?",
+  options: [
+    { text: "2.5", tag: "SCFHS" },
+    { text: "1.0", tag: "SAFE_DELAY" },
+    { text: "1.5", tag: "NCLEX" },
+    { text: "4.5", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Therapeutic INR for most indications is between 2.0 and 3.0.",
+    distractors: {
+      SAFE_DELAY: "INR of 1.0 indicates no anticoagulation.",
+      NCLEX: "INR of 1.5 is subtherapeutic.",
+      STR: "INR of 4.5 increases bleeding risk."
+    }
+  }
+},
+{
+  q: "A client with diabetes reports shakiness, sweating, and confusion. What is the nurse’s PRIORITY action?",
+  options: [
+    { text: "Check blood glucose level", tag: "SCFHS" },
+    { text: "Administer insulin", tag: "SAFE_DELAY" },
+    { text: "Encourage physical activity", tag: "NCLEX" },
+    { text: "Notify the physician", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Symptoms suggest hypoglycemia and require immediate confirmation.",
+    distractors: {
+      SAFE_DELAY: "Insulin would worsen hypoglycemia.",
+      NCLEX: "Activity increases glucose utilization.",
+      STR: "Assessment comes before notification."
+    }
+  }
+},
+{
+  q: "A nurse is teaching a client how to use an incentive spirometer. Which instruction is CORRECT?",
+  options: [
+    { text: "Inhale slowly and deeply through the mouthpiece", tag: "SCFHS" },
+    { text: "Exhale forcefully into the device", tag: "SAFE_DELAY" },
+    { text: "Use the device only when short of breath", tag: "NCLEX" },
+    { text: "Blow into the spirometer rapidly", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Slow, deep inhalation promotes lung expansion.",
+    distractors: {
+      SAFE_DELAY: "Exhalation is not the goal.",
+      NCLEX: "Regular use is required.",
+      STR: "Rapid blowing is incorrect technique."
+    }
+  }
+},
+{
+  q: "A client with chronic kidney disease has a serum potassium level of 6.2 mEq/L. Which finding should the nurse monitor for FIRST?",
+  options: [
+    { text: "Cardiac dysrhythmias", tag: "SCFHS" },
+    { text: "Muscle weakness", tag: "SAFE_DELAY" },
+    { text: "Abdominal cramping", tag: "NCLEX" },
+    { text: "Polyuria", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Hyperkalemia can cause life-threatening cardiac dysrhythmias.",
+    distractors: {
+      SAFE_DELAY: "Muscle weakness may occur but is not priority.",
+      NCLEX: "Abdominal cramping is less critical.",
+      STR: "Polyuria is not associated with hyperkalemia."
+    }
+  }
+},
+{
+  q: "A nurse is caring for a client with increased intracranial pressure (ICP). Which position is MOST appropriate?",
+  options: [
+    { text: "Head of bed elevated 30 degrees", tag: "SCFHS" },
+    { text: "Supine with legs elevated", tag: "SAFE_DELAY" },
+    { text: "Trendelenburg position", tag: "NCLEX" },
+    { text: "Side-lying with knees flexed", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Elevating the head promotes venous drainage and reduces ICP.",
+    distractors: {
+      SAFE_DELAY: "Leg elevation increases ICP.",
+      NCLEX: "Trendelenburg worsens cerebral pressure.",
+      STR: "Flexion can increase ICP."
+    }
+  }
+},
+{
+  q: "A client receiving blood transfusion develops chills, fever, and flank pain. What is the nurse’s PRIORITY action?",
+  options: [
+    { text: "Stop the transfusion immediately", tag: "SCFHS" },
+    { text: "Slow the infusion rate", tag: "SAFE_DELAY" },
+    { text: "Administer antipyretics", tag: "NCLEX" },
+    { text: "Document the reaction", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "These findings suggest a transfusion reaction requiring immediate cessation.",
+    distractors: {
+      SAFE_DELAY: "Slowing the rate does not stop the reaction.",
+      NCLEX: "Medication is secondary to stopping transfusion.",
+      STR: "Documentation follows intervention."
+    }
+  }
+},
+{
+  q: "A nurse is caring for a client with suspected appendicitis. Which action should be AVOIDED?",
+  options: [
+    { text: "Applying heat to the abdomen", tag: "SCFHS" },
+    { text: "Assessing pain location", tag: "SAFE_DELAY" },
+    { text: "Monitoring vital signs", tag: "NCLEX" },
+    { text: "Maintaining NPO status", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Heat can increase inflammation and risk of rupture.",
+    distractors: {
+      SAFE_DELAY: "Pain assessment is appropriate.",
+      NCLEX: "Vital signs are essential.",
+      STR: "NPO status prepares for surgery."
+    }
+  }
+},
+{
+  q: "A client with heart failure is prescribed furosemide. Which laboratory value is MOST important to monitor?",
+  options: [
+    { text: "Potassium level", tag: "SCFHS" },
+    { text: "Calcium level", tag: "SAFE_DELAY" },
+    { text: "Hemoglobin", tag: "NCLEX" },
+    { text: "White blood cell count", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Loop diuretics cause potassium loss leading to dysrhythmias.",
+    distractors: {
+      SAFE_DELAY: "Calcium is not primary.",
+      NCLEX: "Hemoglobin is unrelated.",
+      STR: "WBC count is not affected."
+    }
+  }
+},
+{
+  q: "A nurse is caring for a client on bed rest. Which intervention BEST prevents pressure injuries?",
+  options: [
+    { text: "Repositioning every 2 hours", tag: "SCFHS" },
+    { text: "Using pillows for comfort", tag: "SAFE_DELAY" },
+    { text: "Applying lotion to skin daily", tag: "NCLEX" },
+    { text: "Encouraging increased fluids only", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Regular repositioning relieves pressure and improves circulation.",
+    distractors: {
+      SAFE_DELAY: "Pillows alone are insufficient.",
+      NCLEX: "Lotion does not relieve pressure.",
+      STR: "Hydration alone is inadequate."
+    }
+  }
+},
+{
+  q: "A client with asthma is experiencing wheezing and shortness of breath. Which medication should the nurse administer FIRST?",
+  options: [
+    { text: "Short-acting beta-agonist", tag: "SCFHS" },
+    { text: "Inhaled corticosteroid", tag: "SAFE_DELAY" },
+    { text: "Leukotriene modifier", tag: "NCLEX" },
+    { text: "Long-acting bronchodilator", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Short-acting beta-agonists provide rapid bronchodilation.",
+    distractors: {
+      SAFE_DELAY: "Steroids are for long-term control.",
+      NCLEX: "Leukotriene modifiers are preventive.",
+      STR: "Long-acting agents are not for acute attacks."
+    }
+  }
+},
+{
+  q: "A nurse is assessing a postoperative client and notes absent bowel sounds. What is the MOST appropriate action?",
+  options: [
+    { text: "Continue to monitor and keep NPO", tag: "SCFHS" },
+    { text: "Administer laxatives", tag: "SAFE_DELAY" },
+    { text: "Encourage oral fluids", tag: "NCLEX" },
+    { text: "Insert a rectal tube", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Absent bowel sounds may indicate ileus requiring observation and bowel rest.",
+    distractors: {
+      SAFE_DELAY: "Laxatives may worsen ileus.",
+      NCLEX: "Oral fluids may cause distention.",
+      STR: "Rectal tube is not first-line."
+    }
+  }
+},
+{
+  q: "A nurse is providing discharge teaching to a client prescribed antibiotics. Which instruction is MOST important?",
+  options: [
+    { text: "Complete the entire course as prescribed", tag: "SCFHS" },
+    { text: "Stop medication when symptoms improve", tag: "SAFE_DELAY" },
+    { text: "Take medication only when fever is present", tag: "NCLEX" },
+    { text: "Double the dose if one is missed", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Incomplete therapy contributes to resistance and recurrence.",
+    distractors: {
+      SAFE_DELAY: "Stopping early is unsafe.",
+      NCLEX: "Antibiotics are not PRN.",
+      STR: "Doubling doses increases toxicity."
+    }
+  }
+},
+{
+  q: "A client suddenly reports severe headache, blurred vision, and elevated blood pressure. Which condition does the nurse suspect?",
+  options: [
+    { text: "Hypertensive crisis", tag: "SCFHS" },
+    { text: "Hypotension", tag: "SAFE_DELAY" },
+    { text: "Migraine headache", tag: "NCLEX" },
+    { text: "Dehydration", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Severe symptoms with high BP indicate hypertensive crisis.",
+    distractors: {
+      SAFE_DELAY: "Hypotension presents differently.",
+      NCLEX: "Migraine does not cause severe hypertension.",
+      STR: "Dehydration causes low BP."
+    }
+  }
+},
+
+];
+
+// ================= ENGINE =================
+let shuffledQuestions = [];
+let currentIndex = 0;
+let selectedIndex = null;
+
+let score = { SCFHS:0, NCLEX:0, STR:0, SAFE_DELAY:0 };
+
+// ================= TIMER =================
+let totalTime = 20 * 60; // 20 minutes
+let timeLeft = totalTime;
+let timerInterval = null;
+
+function shuffle(arr) {
+  return [...arr].sort(() => Math.random() - 0.5);
+}
+
+function startExam() {
+  if (!candidateName.value.trim() || !candidateID.value.trim()) {
+    alert("Enter Name and ID");
+    return;
+  }
+
+  shuffledQuestions = shuffle(questions).map(q => ({
+    ...q,
+    options: shuffle(q.options)
+  }));
+
+  startScreen.classList.add("hidden");
+  examScreen.classList.remove("hidden");
+
+  startTimer();
+  loadQuestion();
+}
+
+function loadQuestion() {
+  selectedIndex = null;
+  rationaleBox.classList.add("hidden");
+  nextBtn.classList.add("hidden");
+
+  const q = shuffledQuestions[currentIndex];
+  qCounter.innerText = `Question ${currentIndex + 1} of ${shuffledQuestions.length}`;
+  questionText.innerText = q.q;
+
+  options.innerHTML = "";
+  q.options.forEach((opt, i) => {
+    const div = document.createElement("div");
+    div.className = "option";
+    div.innerText = opt.text;
+    div.onclick = () => selectOption(div, i);
+    options.appendChild(div);
+  });
+}
+
+function selectOption(div, index) {
+  document.querySelectorAll(".option").forEach(o => o.classList.remove("selected"));
+  div.classList.add("selected");
+  selectedIndex = index;
+}
+
+function submitAnswer() {
+  if (selectedIndex === null) {
+    alert("Select an option");
+    return;
+  }
+
+  const q = shuffledQuestions[currentIndex];
+  const chosen = q.options[selectedIndex];
+  const isCorrect = chosen.tag === q.correctTag;
+
+  score[chosen.tag]++;
+
+  document.querySelectorAll(".option").forEach((o, i) => {
+    if (q.options[i].tag === q.correctTag) o.classList.add("correct");
+    if (i === selectedIndex && !isCorrect) o.classList.add("wrong");
+  });
+
+  rationaleBox.classList.remove("hidden");
+  rationaleBox.innerHTML = isCorrect
+    ? `<b>Correct.</b><br><br>${q.rationale.correct}`
+    : `<b>Incorrect.</b><br><br>${q.rationale.distractors[chosen.tag]}
+       <hr><b>Correct Rationale:</b><br>${q.rationale.correct}`;
+
+  nextBtn.classList.remove("hidden");
+}
+
+function nextQuestion() {
+  currentIndex++;
+  currentIndex < shuffledQuestions.length ? loadQuestion() : showResult();
+}
+
+function startTimer() {
+  updateTimer();
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      autoEndExam();
+    }
+    updateTimer();
+  }, 1000);
+}
+
+function updateTimer() {
+  const min = Math.floor(timeLeft / 60);
+  const sec = timeLeft % 60;
+  timer.innerText = `Time Remaining: ${min}:${sec.toString().padStart(2,"0")}`;
+}
+
+function autoEndExam() {
+  if (selectedIndex !== null) submitAnswer();
+  setTimeout(showResult, 600);
+}
+
+function showResult() {
+  clearInterval(timerInterval);
+
+  examScreen.classList.add("hidden");
+  resultScreen.classList.remove("hidden");
+
+  const decision =
+    score.SCFHS >= score.NCLEX && score.SCFHS >= score.STR
+      ? "🟢 GO — SCFHS Ready"
+      : "🔴 NO-GO — Not SCFHS Ready";
+
+  finalReport.innerHTML = `
+    <b>Decision:</b> ${decision}<br><br>
+    <b>SCFHS Alignment:</b> ${score.SCFHS}<br>
+    <b>NCLEX Bias:</b> ${score.NCLEX}<br>
+    <b>STR Bias:</b> ${score.STR}<br><br>
+    <b>Examiner Interpretation:</b><br>
+    ${decision.includes("GO")
+      ? "Consistent prioritization aligned with SCFHS Prometric expectations."
+      : "Delayed or escalation-biased decision-making inconsistent with SCFHS standards."}
+  `;
+}
+</script>
+
+</body>
+</html>
